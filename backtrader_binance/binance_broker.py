@@ -62,16 +62,18 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
                         elif msg['X'] == ORDER_STATUS_EXPIRED:
                             o.expire()
                         elif msg['X'] in [ORDER_STATUS_FILLED, ORDER_STATUS_PARTIALLY_FILLED]:
+                            executed_size = float(msg['l'])
+                            executed_price = float(msg['L'])
                             o.execute(
                                 dt.datetime.fromtimestamp(msg['T'] / 1000.0),
-                                float(msg['l']),
-                                float(msg['L']),
+                                executed_size,
+                                executed_price,
                                 0, 0.0, 0.0,
                                 0, 0.0, 0.0,
                                 0.0, 0.0,
                                 0, 0.0)
                             pos = self.getposition(o.data, clone=False)
-                            pos.update(o.size, o.price)
+                            pos.update(executed_size, executed_price)
                             o.completed() if msg['X'] == ORDER_STATUS_FILLED else o.partial()
                         elif msg['X'] == ORDER_STATUS_REJECTED:
                             o.reject()
