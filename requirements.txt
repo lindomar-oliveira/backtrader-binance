@@ -1,4 +1,4 @@
 backtrader
 matplotlib==3.2.2
 pandas
-git+https://github.com/sammchardy/python-binance/@master
+python-binance@git+https://github.com/sammchardy/python-binance
