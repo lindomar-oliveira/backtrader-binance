@@ -1,5 +1,7 @@
-from collections import defaultdict, deque
 import datetime as dt
+
+from collections import defaultdict, deque
+from math import copysign
 
 from backtrader.broker import BrokerBase
 from backtrader.utils.py3 import with_metaclass
@@ -73,7 +75,7 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
                                 0.0, 0.0,
                                 0, 0.0)
                             pos = self.getposition(o.data, clone=False)
-                            pos.update(executed_size, executed_price)
+                            pos.update(copysign(executed_size, o.size), executed_price)
                             o.completed() if msg['X'] == ORDER_STATUS_FILLED else o.partial()
                         elif msg['X'] == ORDER_STATUS_REJECTED:
                             o.reject()
