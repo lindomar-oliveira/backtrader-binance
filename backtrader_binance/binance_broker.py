@@ -16,13 +16,19 @@ class BinanceOrder(OrderBase):
     def __init__(self, owner, data, exectype, binance_order):
         self.owner = owner
         self.data = data
-        self.size = float(binance_order['origQty'])
-        self.price = float(binance_order['price'])
         self.exectype = exectype
         self.ordtype = self.Buy if binance_order['side'] == SIDE_BUY else self.Sell
-        self.binance_order = binance_order
 
         super(BinanceOrder, self).__init__()
+        
+        # Market order price is zero
+        if self.exectype == Order.Market:
+            self.size = float(binance_order['executedQty'])
+            self.price = sum(float(fill['price']) for fill in binance_order['fills']) / len(binance_order['fills'])  # Average price
+        else:
+            self.size = float(binance_order['origQty'])
+            self.price = float(binance_order['price'])
+        self.binance_order = binance_order
 
 
 class MetaBinanceBroker(BrokerBase.__class__):
