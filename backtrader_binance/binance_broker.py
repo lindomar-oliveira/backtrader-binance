@@ -65,11 +65,9 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
             if msg['s'] == self.store.symbol:
                 for o in self.open_orders:
                     if o.binance_order['orderId'] == msg['i']:
-                        if msg['X'] == ORDER_STATUS_CANCELED:
-                            o.cancel()
-                        elif msg['X'] == ORDER_STATUS_EXPIRED:
-                            o.expire()
-                        elif msg['X'] in [ORDER_STATUS_FILLED, ORDER_STATUS_PARTIALLY_FILLED]:
+                        self._set_order_status(o, msg['X'])
+                        
+                        if msg['X'] in [ORDER_STATUS_FILLED, ORDER_STATUS_PARTIALLY_FILLED]:
                             executed_size = float(msg['l'])
                             executed_price = float(msg['L'])
                             o.execute(
@@ -82,21 +80,31 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
                                 0, 0.0)
                             pos = self.getposition(o.data, clone=False)
                             pos.update(copysign(executed_size, o.size), executed_price)
-                            o.completed() if msg['X'] == ORDER_STATUS_FILLED else o.partial()
-                        elif msg['X'] == ORDER_STATUS_REJECTED:
-                            o.reject()
 
                         if msg['X'] not in [ORDER_STATUS_NEW, ORDER_STATUS_PARTIALLY_FILLED]:
                             self.open_orders.remove(o)
                         self.notify(o)
         elif msg['e'] == 'error':
             raise msg
+    
+    def _set_order_status(self, order, binance_order_status):
+        if binance_order_status == ORDER_STATUS_CANCELED:
+            order.cancel()
+        elif binance_order_status == ORDER_STATUS_EXPIRED:
+            order.expire()
+        elif binance_order_status == ORDER_STATUS_FILLED:
+            order.completed()
+        elif binance_order_status == ORDER_STATUS_PARTIALLY_FILLED:
+            order.partial()
+        elif binance_order_status == ORDER_STATUS_REJECTED:
+            order.reject()
 
     def _submit(self, owner, data, side, exectype, size, price):
         order_type = self._ORDER_TYPES.get(exectype, ORDER_TYPE_MARKET)
 
         binance_order = self.store.create_order(side, order_type, size, price)
         order = BinanceOrder(owner, data, exectype, binance_order)
+        self._set_order_status(order, binance_order['status'])
         self.open_orders.append(order)
         self.notify(order)
         return order
