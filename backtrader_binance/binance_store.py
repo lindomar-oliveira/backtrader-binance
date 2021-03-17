@@ -99,13 +99,22 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
     
     @retry
     def create_order(self, side, type, size, price):
+        params = dict()
+        if type in [ORDER_TYPE_LIMIT, ORDER_TYPE_STOP_LOSS_LIMIT]:
+            params.update({
+                'timeInForce': TIME_IN_FORCE_GTC
+            })
+        if type != ORDER_TYPE_MARKET:
+            params.update({
+                'price': self.strprecision(price)
+            })
+
         return self.binance.create_order(
             symbol=self.symbol,
             side=side,
             type=type,
-            timeInForce=TIME_IN_FORCE_GTC,
             quantity=self.format_quantity(size),
-            price=self.strprecision(price))
+            **params)
     
     @retry
     def close_open_orders(self):
