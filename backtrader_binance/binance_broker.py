@@ -17,8 +17,6 @@ class BinanceOrder(OrderBase):
         self.data = data
         self.exectype = exectype
         self.ordtype = self.Buy if binance_order['side'] == SIDE_BUY else self.Sell
-
-        super(BinanceOrder, self).__init__()
         
         # Market order price is zero
         if self.exectype == Order.Market:
@@ -28,6 +26,9 @@ class BinanceOrder(OrderBase):
             self.size = float(binance_order['origQty'])
             self.price = float(binance_order['price'])
         self.binance_order = binance_order
+        
+        super(BinanceOrder, self).__init__()
+        self.accept()
 
 
 class MetaBinanceBroker(BrokerBase.__class__):
