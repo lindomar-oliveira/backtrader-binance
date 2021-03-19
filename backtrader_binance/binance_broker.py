@@ -1,6 +1,5 @@
-import datetime as dt
-
 from collections import defaultdict, deque
+from datetime import datetime
 from math import copysign
 
 from backtrader.broker import BrokerBase
@@ -44,7 +43,7 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
         Order.Limit: ORDER_TYPE_LIMIT,
         Order.Market: ORDER_TYPE_MARKET,
         Order.Stop: ORDER_TYPE_STOP_LOSS,
-        Order.StopLimit: ORDER_TYPE_STOP_LOSS_LIMIT,
+        Order.StopLimit: ORDER_TYPE_STOP_LOSS_LIMIT
     }
 
     def __init__(self, **kwargs):
@@ -58,6 +57,18 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
         self.store.start_socket()
 
         self.open_orders = list()
+        
+    def _execute_order(self, order, dt, executed_size, executed_price):
+        order.execute(
+            dt,
+            executed_size,
+            executed_price,
+            0, 0.0, 0.0,
+            0, 0.0, 0.0,
+            0.0, 0.0,
+            0, 0.0)
+        pos = self.getposition(order.data, clone=False)
+        pos.update(copysign(executed_size, order.size), executed_price)
 
     def _process_user_socket_msg(self, msg):
         """https://binance-docs.github.io/apidocs/spot/en/#payload-order-update"""
@@ -65,23 +76,14 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
             if msg['s'] == self.store.symbol:
                 for o in self.open_orders:
                     if o.binance_order['orderId'] == msg['i']:
-                        self._set_order_status(o, msg['X'])
-                        
                         if msg['X'] in [ORDER_STATUS_FILLED, ORDER_STATUS_PARTIALLY_FILLED]:
+                            dt = datetime.fromtimestamp(msg['T'] / 1000)
                             executed_size = float(msg['l'])
                             executed_price = float(msg['L'])
-                            o.execute(
-                                dt.datetime.fromtimestamp(msg['T'] / 1000.0),
-                                executed_size,
-                                executed_price,
-                                0, 0.0, 0.0,
-                                0, 0.0, 0.0,
-                                0.0, 0.0,
-                                0, 0.0)
-                            pos = self.getposition(o.data, clone=False)
-                            pos.update(copysign(executed_size, o.size), executed_price)
+                            self._execute_order(o, dt, executed_size, executed_price)
+                        self._set_order_status(o, msg['X'])
 
-                        if msg['X'] not in [ORDER_STATUS_NEW, ORDER_STATUS_PARTIALLY_FILLED]:
+                        if o.status not in [Order.Accepted, Order.Partial]:
                             self.open_orders.remove(o)
                         self.notify(o)
         elif msg['e'] == 'error':
@@ -104,8 +106,15 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
 
         binance_order = self.store.create_order(side, order_type, size, price)
         order = BinanceOrder(owner, data, exectype, binance_order)
+        if binance_order['status'] in [ORDER_STATUS_FILLED, ORDER_STATUS_PARTIALLY_FILLED]:
+            self._execute_order(
+                order,
+                datetime.fromtimestamp(binance_order['transactTime'] / 1000),
+                float(binance_order['executedQty']),
+                float(binance_order['price']))
         self._set_order_status(order, binance_order['status'])
-        self.open_orders.append(order)
+        if order.status == Order.Accepted:
+            self.open_orders.append(order)
         self.notify(order)
         return order
 
