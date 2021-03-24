@@ -1,6 +1,7 @@
+import time
+
 from functools import wraps
 from math import floor
-import time
 
 from backtrader.dataseries import TimeFrame
 from backtrader.metabase import MetaParams
@@ -9,6 +10,7 @@ from binance.client import Client
 from binance.websockets import BinanceSocketManager
 from binance.enums import *
 from binance.exceptions import BinanceAPIException
+from requests.exceptions import ConnectTimeout, ConnectionError
 from twisted.internet import reactor
 
 
@@ -42,7 +44,7 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         (TimeFrame.Days, 1): '1d',
         (TimeFrame.Days, 3): '3d',
         (TimeFrame.Weeks, 1): '1w',
-        (TimeFrame.Months, 1): '1M',
+        (TimeFrame.Months, 1): '1M'
     }
 
     BrokerCls = None  # Broker class will autoregister
@@ -79,7 +81,7 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
                 time.sleep(500 / 1000)  # Rate limit
                 try:
                     return method(self, *args, **kwargs)
-                except BinanceAPIException:
+                except (BinanceAPIException, ConnectTimeout, ConnectionError):
                     if i == self.retries - 1:
                         raise
 
