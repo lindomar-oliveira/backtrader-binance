@@ -74,18 +74,22 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         self._value = 0
         self.get_balance()
         
-    def retry(method):
-        @wraps(method)
-        def retry_method(self, *args, **kwargs):
-            for i in range(self.retries):
-                time.sleep(500 / 1000)  # Rate limit
+    def retry(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            for attempt in range(1, self.retries + 1):
+                time.sleep(60 / 1200) # API Rate Limit
                 try:
-                    return method(self, *args, **kwargs)
-                except (BinanceAPIException, ConnectTimeout, ConnectionError):
-                    if i == self.retries - 1:
+                    return func(self, *args, **kwargs)
+                except (BinanceAPIException, ConnectTimeout, ConnectionError) as err:
+                    if isinstance(err, BinanceAPIException) and err.code == -1021:
+                        # Recalculate timestamp offset between local and Binance's server
+                        res = self.binance.get_server_time()
+                        self.binance.timestamp_offset = res['serverTime'] - int(time.time() * 1000)
+                    
+                    if attempt == self.retries:
                         raise
-
-        return retry_method
+        return wrapper
 
     @retry
     def cancel_order(self, order_id):
