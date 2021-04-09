@@ -7,9 +7,9 @@ from backtrader.dataseries import TimeFrame
 from backtrader.metabase import MetaParams
 from backtrader.utils.py3 import with_metaclass
 from binance.client import Client
-from binance.websockets import BinanceSocketManager
 from binance.enums import *
 from binance.exceptions import BinanceAPIException
+from binance.websockets import BinanceSocketManager
 from requests.exceptions import ConnectTimeout, ConnectionError
 from twisted.internet import reactor
 
@@ -65,6 +65,7 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         self.binance_socket = BinanceSocketManager(self.binance)
         self.coin_refer = coin_refer
         self.coin_target = coin_target
+        self.symbol = coin_refer + coin_target
         self.retries = retries
 
         self._precision = None
@@ -102,6 +103,12 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
                 raise api_err
         except Exception as err:
             raise err
+
+    @retry
+    def close_open_orders(self):
+        orders = self.binance.get_open_orders(symbol=self.symbol)
+        for o in orders:
+            self.cancel_order(o['orderId'])
     
     @retry
     def create_order(self, side, type, size, price):
@@ -121,12 +128,6 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
             type=type,
             quantity=self.format_quantity(size),
             **params)
-    
-    @retry
-    def close_open_orders(self):
-        orders = self.binance.get_open_orders(symbol=self.symbol)
-        for o in orders:
-            self.cancel_order(o['orderId'])
 
     def format_quantity(self, size):
         precision = self.step_size.find('1') - 1
@@ -188,7 +189,3 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
 
     def strprecision(self, value):
         return '{:.{}f}'.format(value, self.precision)
-
-    @property
-    def symbol(self):
-        return '{}{}'.format(self.coin_refer, self.coin_target)
