@@ -12,6 +12,15 @@ Usage
 
 See examples folder
 
+Contribute with Project
+Donate
+
+Thanks
+======
+
+- backtrader: An incredible library...
+- [python-binance](https://github.com/sammchardy/python-binance): For creating Binance API wrapper, shortening a lot of work.
+
 License
 =======
 
