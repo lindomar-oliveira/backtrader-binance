@@ -128,6 +128,9 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
     def cancel(self, order):
         order_id = order.binance_order['orderId']
         self.store.cancel_order(order_id)
+        
+    def format_price(self, value):
+        return self.store.format_price(value)
 
     def get_asset_balance(self, asset):
         return self.store.get_asset_balance(asset)
@@ -160,6 +163,3 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
              trailamount=None, trailpercent=None,
              **kwargs):
         return self._submit(owner, data, SIDE_SELL, exectype, size, price)
-
-    def strprecision(self, value):
-        return self.store.strprecision(value)

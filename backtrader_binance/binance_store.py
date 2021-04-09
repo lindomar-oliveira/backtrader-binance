@@ -68,12 +68,19 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         self.symbol = coin_refer + coin_target
         self.retries = retries
 
-        self._precision = None
-        self._step_size = None
+        self.step_size = None
+        self.tick_size = None
+        self.get_filters()
 
         self._cash = 0
         self._value = 0
         self.get_balance()
+        
+    def _format_value(self, value, step):
+        precision = step.find('1') - 1
+        if precision > 0:
+            return '{:0.0{}f}'.format(value, precision)
+        return floor(int(value))
         
     def retry(func):
         @wraps(func)
@@ -119,7 +126,7 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
             })
         if type != ORDER_TYPE_MARKET:
             params.update({
-                'price': self.strprecision(price)
+                'price': self.format_price(price)
             })
 
         return self.binance.create_order(
@@ -129,11 +136,11 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
             quantity=self.format_quantity(size),
             **params)
 
+    def format_price(self, price):
+        return self._format_value(price, self.tick_size)
+    
     def format_quantity(self, size):
-        precision = self.step_size.find('1') - 1
-        if precision > 0:
-            return '{:0.0{}f}'.format(size, precision)
-        return floor(int(size))
+        return self._format_value(size, self.step_size)
 
     @retry
     def get_asset_balance(self, asset):
@@ -144,48 +151,29 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         free, locked = self.get_asset_balance(self.coin_target)
         self._cash = free
         self._value = free + locked
-
-    def get_interval(self, timeframe, compression):
-        return self._GRANULARITIES.get((timeframe, compression))
-
-    def get_precision(self):
-        symbol_info = self.get_symbol_info(self.symbol)
-        self._precision = symbol_info['baseAssetPrecision']
-
-    def get_step_size(self):
+        
+    def get_filters(self):
         symbol_info = self.get_symbol_info(self.symbol)
         for f in symbol_info['filters']:
             if f['filterType'] == 'LOT_SIZE':
-                self._step_size = f['stepSize']
+                self.step_size = f['stepSize']
+            elif f['filterType'] == 'PRICE_FILTER':
+                self.tick_size = f['tickSize']
+
+    def get_interval(self, timeframe, compression):
+        return self._GRANULARITIES.get((timeframe, compression))
 
     @retry
     def get_symbol_info(self, symbol):
         return self.binance.get_symbol_info(symbol)
 
-    @property
-    def precision(self):
-        if not self._precision:
-            self.get_precision()
-        return self._precision
-    
     def start_socket(self):
         if self.binance_socket.is_alive():
             return
-
         self.binance_socket.daemon = True
         self.binance_socket.start()
-
-    @property
-    def step_size(self):
-        if not self._step_size:
-            self.get_step_size()
-
-        return self._step_size
 
     def stop_socket(self):
         self.binance_socket.close()
         reactor.stop()
         self.binance_socket.join()
-
-    def strprecision(self, value):
-        return '{:.{}f}'.format(value, self.precision)
