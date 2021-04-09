@@ -12,9 +12,6 @@ Usage
 
 See examples folder
 
-Contribute with Project
-Donate
-
 Thanks
 ======
 
