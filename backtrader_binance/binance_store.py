@@ -100,6 +100,12 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         return wrapper
 
     @retry
+    def cancel_open_orders(self):
+        orders = self.binance.get_open_orders(symbol=self.symbol)
+        for o in orders:
+            self.cancel_order(o['orderId'])
+
+    @retry
     def cancel_order(self, order_id):
         try:
             self.binance.cancel_order(symbol=self.symbol, orderId=order_id)
@@ -110,12 +116,6 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
                 raise api_err
         except Exception as err:
             raise err
-
-    @retry
-    def close_open_orders(self):
-        orders = self.binance.get_open_orders(symbol=self.symbol)
-        for o in orders:
-            self.cancel_order(o['orderId'])
     
     @retry
     def create_order(self, side, type, size, price):
