@@ -37,7 +37,7 @@ class BinanceData(with_metaclass(MetaBinanceData, DataBase)):
         return True
         
     def start(self):
-        DataBase.start()
+        DataBase.start(self)
 
         self.interval = self.store.get_interval(self.p.timeframe, self.p.compression)
         if self.interval is None:
