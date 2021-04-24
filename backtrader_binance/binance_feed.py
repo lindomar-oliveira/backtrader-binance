@@ -1,9 +1,10 @@
 from collections import deque
 
+import pandas as pd
+
 from backtrader.feed import DataBase
 from backtrader.utils import date2num
 from backtrader.utils.py3 import with_metaclass
-import pandas as pd
 
 from .binance_store import BinanceStore
 
@@ -30,46 +31,6 @@ class BinanceData(with_metaclass(MetaBinanceData, DataBase)):
         self.store = BinanceStore(**kwargs)
         self._data = deque()
 
-    def haslivedata(self):
-        return self._state == self._ST_LIVE and self._data
-
-    def islive(self):
-        return True
-        
-    def start(self):
-        DataBase.start(self)
-
-        self.interval = self.store.get_interval(self.p.timeframe, self.p.compression)
-        if self.interval is None:
-            self._state = self._ST_OVER
-            self.put_notification(self.NOTSUPPORTED_TF)
-            return
-        
-        self.symbol_info = self.store.get_symbol_info(self.p.dataname)
-        if self.symbol_info is None:
-            self._state = self._ST_OVER
-            self.put_notification(self.NOTSUBSCRIBED)
-            return
-
-        if self.p.fromdate:
-            self._state = self._ST_HISTORBACK
-            self.put_notification(self.DELAYED)
-
-            klines = self.store.binance.get_historical_klines(
-                self.symbol_info['symbol'],
-                self.interval,
-                self.p.fromdate.strftime('%d %b %Y %H:%M:%S'))
-
-            if self.p.drop_newest:
-                klines.pop()
-            
-            df = pd.DataFrame(klines)
-            df.drop(df.columns[[6, 7, 8, 9, 10, 11]], axis=1, inplace=True)  # Remove unnecessary columns
-            df = self._parser_dataframe(df)
-            self._data.extend(df.values.tolist())            
-        else:
-            self._start_live()
-    
     def _load(self):
         if self._state == self._ST_OVER:
             return False
@@ -128,5 +89,48 @@ class BinanceData(with_metaclass(MetaBinanceData, DataBase)):
         self._state = self._ST_LIVE
         self.put_notification(self.LIVE)
             
-        self.store.binance_socket.start_kline_socket(self.symbol_info['symbol'], self._process_kline_msg, self.interval)
+        self.store.binance_socket.start_kline_socket(
+            self.symbol_info['symbol'],
+            self._process_kline_msg,
+            self.interval)
         self.store.start_socket()
+        
+    def haslivedata(self):
+        return self._state == self._ST_LIVE and self._data
+
+    def islive(self):
+        return True
+        
+    def start(self):
+        DataBase.start(self)
+
+        self.interval = self.store.get_interval(self.p.timeframe, self.p.compression)
+        if self.interval is None:
+            self._state = self._ST_OVER
+            self.put_notification(self.NOTSUPPORTED_TF)
+            return
+        
+        self.symbol_info = self.store.get_symbol_info(self.p.dataname)
+        if self.symbol_info is None:
+            self._state = self._ST_OVER
+            self.put_notification(self.NOTSUBSCRIBED)
+            return
+
+        if self.p.fromdate:
+            self._state = self._ST_HISTORBACK
+            self.put_notification(self.DELAYED)
+
+            klines = self.store.binance.get_historical_klines(
+                self.symbol_info['symbol'],
+                self.interval,
+                self.p.fromdate.strftime('%d %b %Y %H:%M:%S'))
+
+            if self.p.drop_newest:
+                klines.pop()
+            
+            df = pd.DataFrame(klines)
+            df.drop(df.columns[[6, 7, 8, 9, 10, 11]], axis=1, inplace=True)  # Remove unnecessary columns
+            df = self._parser_dataframe(df)
+            self._data.extend(df.values.tolist())            
+        else:
+            self._start_live()

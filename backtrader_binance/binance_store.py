@@ -176,4 +176,3 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
     def stop_socket(self):
         self.binance_socket.close()
         reactor.stop()
-        self.binance_socket.join()
