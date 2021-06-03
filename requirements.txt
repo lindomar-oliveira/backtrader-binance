@@ -1,4 +1,4 @@
 backtrader==1.9.76.123
 matplotlib==3.2.2
 pandas==1.2.4
-python-binance==0.7.11
+python-binance==1.0.11

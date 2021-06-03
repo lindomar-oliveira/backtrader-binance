@@ -6,12 +6,10 @@ from math import floor
 from backtrader.dataseries import TimeFrame
 from backtrader.metabase import MetaParams
 from backtrader.utils.py3 import with_metaclass
-from binance.client import Client
+from binance import Client, ThreadedWebsocketManager
 from binance.enums import *
 from binance.exceptions import BinanceAPIException
-from binance.websockets import BinanceSocketManager
 from requests.exceptions import ConnectTimeout, ConnectionError
-from twisted.internet import reactor
 
 
 class MetaSingleton(MetaParams):
@@ -62,7 +60,9 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
 
     def __init__(self, api_key, api_secret, coin_refer, coin_target, retries=5, testnet=False):
         self.binance = Client(api_key, api_secret, testnet=testnet)
-        self.binance_socket = BinanceSocketManager(self.binance)
+        self.binance_socket = ThreadedWebsocketManager(api_key, api_secret, testnet=testnet)
+        self.binance_socket.daemon = True
+        self.binance_socket.start()
         self.coin_refer = coin_refer
         self.coin_target = coin_target
         self.symbol = coin_refer + coin_target
@@ -167,12 +167,6 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
     def get_symbol_info(self, symbol):
         return self.binance.get_symbol_info(symbol)
 
-    def start_socket(self):
-        if self.binance_socket.is_alive():
-            return
-        self.binance_socket.daemon = True
-        self.binance_socket.start()
-
     def stop_socket(self):
         self.binance_socket.close()
-        reactor.stop()
+        self.binance_socket.join(5)

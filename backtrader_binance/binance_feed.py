@@ -31,10 +31,18 @@ class BinanceData(with_metaclass(MetaBinanceData, DataBase)):
         self.store = BinanceStore(**kwargs)
         self._data = deque()
 
+    def _handle_kline_socket_message(self, msg):
+        """https://binance-docs.github.io/apidocs/spot/en/#kline-candlestick-streams"""
+        if msg['e'] == 'kline':
+            if msg['k']['x']:  # Is closed
+                kline = self._parser_to_kline(msg['k']['t'], msg['k'])
+                self._data.extend(kline.values.tolist())
+        elif msg['e'] == 'error':
+            raise msg
+
     def _load(self):
         if self._state == self._ST_OVER:
             return False
-        
         elif self._state == self._ST_LIVE:
             return self._load_kline()
         elif self._state == self._ST_HISTORBACK:
@@ -76,24 +84,14 @@ class BinanceData(with_metaclass(MetaBinanceData, DataBase)):
                             kline['l'], kline['c'], kline['v']]])
         return self._parser_dataframe(df)
     
-    def _process_kline_msg(self, msg):
-        """https://binance-docs.github.io/apidocs/spot/en/#kline-candlestick-streams"""
-        if msg['e'] == 'kline':
-            if msg['k']['x']:  # Is closed
-                kline = self._parser_to_kline(msg['k']['t'], msg['k'])
-                self._data.extend(kline.values.tolist())
-        elif msg['e'] == 'error':
-            raise msg
-    
     def _start_live(self):
         self._state = self._ST_LIVE
         self.put_notification(self.LIVE)
             
         self.store.binance_socket.start_kline_socket(
+            self._handle_kline_socket_message,
             self.symbol_info['symbol'],
-            self._process_kline_msg,
             self.interval)
-        self.store.start_socket()
         
     def haslivedata(self):
         return self._state == self._ST_LIVE and self._data

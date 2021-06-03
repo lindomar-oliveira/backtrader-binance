@@ -54,8 +54,7 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
         self.positions = defaultdict(Position)
 
         self.store = BinanceStore(**kwargs)
-        self.store.binance_socket.start_user_socket(self._process_user_socket_msg)
-        self.store.start_socket()
+        self.store.binance_socket.start_user_socket(self._handle_user_socket_message)
 
         self.open_orders = list()
         
@@ -71,7 +70,7 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
         pos = self.getposition(order.data, clone=False)
         pos.update(copysign(executed_size, order.size), executed_price)
 
-    def _process_user_socket_msg(self, msg):
+    def _handle_user_socket_message(self, msg):
         """https://binance-docs.github.io/apidocs/spot/en/#payload-order-update"""
         if msg['e'] == 'executionReport':
             if msg['s'] == self.store.symbol:
