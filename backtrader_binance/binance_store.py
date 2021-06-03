@@ -60,8 +60,8 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         """Returns broker with *args, **kwargs from registered ``BrokerCls``"""
         return cls.BrokerCls(*args, **kwargs)
 
-    def __init__(self, api_key, api_secret, coin_refer, coin_target, retries=5):
-        self.binance = Client(api_key, api_secret)
+    def __init__(self, api_key, api_secret, coin_refer, coin_target, retries=5, testnet=False):
+        self.binance = Client(api_key, api_secret, testnet=testnet)
         self.binance_socket = BinanceSocketManager(self.binance)
         self.coin_refer = coin_refer
         self.coin_target = coin_target
