@@ -2,24 +2,12 @@ from collections import deque
 
 import pandas as pd
 
+from backtrader.dataseries import TimeFrame
 from backtrader.feed import DataBase
 from backtrader.utils import date2num
-from backtrader.utils.py3 import with_metaclass
-
-from .binance_store import BinanceStore
 
 
-class MetaBinanceData(DataBase.__class__):
-    def __init__(cls, name, bases, dct):
-        """Class has already been created ... register"""
-        # Initialize the class
-        super(MetaBinanceData, cls).__init__(name, bases, dct)
-
-        # Register with the store
-        BinanceStore.DataCls = cls
-
-
-class BinanceData(with_metaclass(MetaBinanceData, DataBase)):
+class BinanceData(DataBase):
     params = (
         ('drop_newest', True),
     )
@@ -27,8 +15,11 @@ class BinanceData(with_metaclass(MetaBinanceData, DataBase)):
     # States for the Finite State Machine in _load
     _ST_LIVE, _ST_HISTORBACK, _ST_OVER = range(3)
 
-    def __init__(self, **kwargs):
-        self.store = BinanceStore(**kwargs)
+    def __init__(self, store, timeframe_in_minutes, start_date=None):
+        self.timeframe_in_minutes = timeframe_in_minutes
+        self.start_date = start_date
+
+        self._store = store
         self._data = deque()
 
     def _handle_kline_socket_message(self, msg):
@@ -88,7 +79,7 @@ class BinanceData(with_metaclass(MetaBinanceData, DataBase)):
         self._state = self._ST_LIVE
         self.put_notification(self.LIVE)
             
-        self.store.binance_socket.start_kline_socket(
+        self._store.binance_socket.start_kline_socket(
             self._handle_kline_socket_message,
             self.symbol_info['symbol'],
             self.interval)
@@ -102,23 +93,23 @@ class BinanceData(with_metaclass(MetaBinanceData, DataBase)):
     def start(self):
         DataBase.start(self)
 
-        self.interval = self.store.get_interval(self.p.timeframe, self.p.compression)
+        self.interval = self._store.get_interval(TimeFrame.Minutes, self.timeframe_in_minutes)
         if self.interval is None:
             self._state = self._ST_OVER
             self.put_notification(self.NOTSUPPORTED_TF)
             return
         
-        self.symbol_info = self.store.get_symbol_info(self.p.dataname)
+        self.symbol_info = self._store.get_symbol_info(self._store.symbol)
         if self.symbol_info is None:
             self._state = self._ST_OVER
             self.put_notification(self.NOTSUBSCRIBED)
             return
 
-        if self.p.fromdate:
+        if self.start_date:
             self._state = self._ST_HISTORBACK
             self.put_notification(self.DELAYED)
 
-            klines = self.store.binance.get_historical_klines(
+            klines = self._store.binance.get_historical_klines(
                 self.symbol_info['symbol'],
                 self.interval,
                 self.p.fromdate.strftime('%d %b %Y %H:%M:%S'))

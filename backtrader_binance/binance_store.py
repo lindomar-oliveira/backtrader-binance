@@ -4,59 +4,33 @@ from functools import wraps
 from math import floor
 
 from backtrader.dataseries import TimeFrame
-from backtrader.metabase import MetaParams
-from backtrader.utils.py3 import with_metaclass
 from binance import Client, ThreadedWebsocketManager
 from binance.enums import *
 from binance.exceptions import BinanceAPIException
 from requests.exceptions import ConnectTimeout, ConnectionError
 
-
-class MetaSingleton(MetaParams):
-    """Metaclass to make a metaclassed class a singleton"""
-    def __init__(cls, name, bases, dct):
-        super(MetaSingleton, cls).__init__(name, bases, dct)
-        cls._singleton = None
-
-    def __call__(cls, *args, **kwargs):
-        if cls._singleton is None:
-            cls._singleton = (
-                super(MetaSingleton, cls).__call__(*args, **kwargs))
-
-        return cls._singleton
+from .binance_broker import BinanceBroker
+from .binance_feed import BinanceData
 
 
-class BinanceStore(with_metaclass(MetaSingleton, object)):
+class BinanceStore(object):
     _GRANULARITIES = {
-        (TimeFrame.Minutes, 1): '1m',
-        (TimeFrame.Minutes, 3): '3m',
-        (TimeFrame.Minutes, 5): '5m',
-        (TimeFrame.Minutes, 15): '15m',
-        (TimeFrame.Minutes, 30): '30m',
-        (TimeFrame.Minutes, 60): '1h',
-        (TimeFrame.Minutes, 120): '2h',
-        (TimeFrame.Minutes, 240): '4h',
-        (TimeFrame.Minutes, 360): '6h',
-        (TimeFrame.Minutes, 480): '8h',
-        (TimeFrame.Minutes, 720): '12h',
-        (TimeFrame.Days, 1): '1d',
-        (TimeFrame.Days, 3): '3d',
-        (TimeFrame.Weeks, 1): '1w',
-        (TimeFrame.Months, 1): '1M'
+        (TimeFrame.Minutes, 1): KLINE_INTERVAL_1MINUTE,
+        (TimeFrame.Minutes, 3): KLINE_INTERVAL_3MINUTE,
+        (TimeFrame.Minutes, 5): KLINE_INTERVAL_5MINUTE,
+        (TimeFrame.Minutes, 15): KLINE_INTERVAL_15MINUTE,
+        (TimeFrame.Minutes, 30): KLINE_INTERVAL_30MINUTE,
+        (TimeFrame.Minutes, 60): KLINE_INTERVAL_1HOUR,
+        (TimeFrame.Minutes, 120): KLINE_INTERVAL_2HOUR,
+        (TimeFrame.Minutes, 240): KLINE_INTERVAL_4HOUR,
+        (TimeFrame.Minutes, 360): KLINE_INTERVAL_6HOUR,
+        (TimeFrame.Minutes, 480): KLINE_INTERVAL_8HOUR,
+        (TimeFrame.Minutes, 720): KLINE_INTERVAL_12HOUR,
+        (TimeFrame.Days, 1): KLINE_INTERVAL_1DAY,
+        (TimeFrame.Days, 3): KLINE_INTERVAL_3DAY,
+        (TimeFrame.Weeks, 1): KLINE_INTERVAL_1WEEK,
+        (TimeFrame.Months, 1): KLINE_INTERVAL_1MONTH,
     }
-
-    BrokerCls = None  # Broker class will autoregister
-    DataCls = None  # Data class will auto register
-
-    @classmethod
-    def getdata(cls, *args, **kwargs):
-        """Returns ``DataCls`` with args, kwargs"""
-        return cls.DataCls(*args, **kwargs)
-
-    @classmethod
-    def getbroker(cls, *args, **kwargs):
-        """Returns broker with *args, **kwargs from registered ``BrokerCls``"""
-        return cls.BrokerCls(*args, **kwargs)
 
     def __init__(self, api_key, api_secret, coin_refer, coin_target, retries=5, testnet=False):
         self.binance = Client(api_key, api_secret, testnet=testnet)
@@ -68,13 +42,16 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         self.symbol = coin_refer + coin_target
         self.retries = retries
 
-        self.step_size = None
-        self.tick_size = None
-        self.get_filters()
-
         self._cash = 0
         self._value = 0
         self.get_balance()
+
+        self._step_size = None
+        self._tick_size = None
+        self.get_filters()
+
+        self._broker = BinanceBroker(store=self)
+        self._data = None
         
     def _format_value(self, value, step):
         precision = step.find('1') - 1
@@ -151,14 +128,22 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         free, locked = self.get_asset_balance(self.coin_target)
         self._cash = free
         self._value = free + locked
+
+    def getbroker(self):
+        return self._broker
+
+    def getdata(self, timeframe_in_minutes, start_date=None):
+        if not self._data:
+            self._data = BinanceData(store=self, timeframe_in_minutes=timeframe_in_minutes, start_date=start_date)
+        return self._data
         
     def get_filters(self):
         symbol_info = self.get_symbol_info(self.symbol)
         for f in symbol_info['filters']:
             if f['filterType'] == 'LOT_SIZE':
-                self.step_size = f['stepSize']
+                self._step_size = f['stepSize']
             elif f['filterType'] == 'PRICE_FILTER':
-                self.tick_size = f['tickSize']
+                self._tick_size = f['tickSize']
 
     def get_interval(self, timeframe, compression):
         return self._GRANULARITIES.get((timeframe, compression))
@@ -168,5 +153,5 @@ class BinanceStore(with_metaclass(MetaSingleton, object)):
         return self.binance.get_symbol_info(symbol)
 
     def stop_socket(self):
-        self.binance_socket.close()
+        self.binance_socket.stop()
         self.binance_socket.join(5)

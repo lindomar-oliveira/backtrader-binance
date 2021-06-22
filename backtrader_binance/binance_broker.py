@@ -1,14 +1,12 @@
+import datetime as dt
+
 from collections import defaultdict, deque
-from datetime import datetime
 from math import copysign
 
 from backtrader.broker import BrokerBase
-from backtrader.utils.py3 import with_metaclass
 from backtrader.order import Order, OrderBase
 from backtrader.position import Position
 from binance.enums import *
-
-from .binance_store import BinanceStore
 
 
 class BinanceOrder(OrderBase):
@@ -31,36 +29,28 @@ class BinanceOrder(OrderBase):
         self.accept()
 
 
-class MetaBinanceBroker(BrokerBase.__class__):
-    def __init__(cls, name, bases, dct):
-        """Class has already been created ... register"""
-        # Initialize the class
-        super(MetaBinanceBroker, cls).__init__(name, bases, dct)
-        BinanceStore.BrokerCls = cls
-
-
-class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
+class BinanceBroker(BrokerBase):
     _ORDER_TYPES = {
         Order.Limit: ORDER_TYPE_LIMIT,
         Order.Market: ORDER_TYPE_MARKET,
         Order.Stop: ORDER_TYPE_STOP_LOSS,
-        Order.StopLimit: ORDER_TYPE_STOP_LOSS_LIMIT
+        Order.StopLimit: ORDER_TYPE_STOP_LOSS_LIMIT,
     }
 
-    def __init__(self, **kwargs):
+    def __init__(self, store):
         super(BinanceBroker, self).__init__()
 
         self.notifs = deque()
         self.positions = defaultdict(Position)
 
-        self.store = BinanceStore(**kwargs)
-        self.store.binance_socket.start_user_socket(self._handle_user_socket_message)
-
         self.open_orders = list()
-        
-    def _execute_order(self, order, dt, executed_size, executed_price):
+    
+        self._store = store
+        self._store.binance_socket.start_user_socket(self._handle_user_socket_message)
+
+    def _execute_order(self, order, date, executed_size, executed_price):
         order.execute(
-            dt,
+            date,
             executed_size,
             executed_price,
             0, 0.0, 0.0,
@@ -73,11 +63,11 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
     def _handle_user_socket_message(self, msg):
         """https://binance-docs.github.io/apidocs/spot/en/#payload-order-update"""
         if msg['e'] == 'executionReport':
-            if msg['s'] == self.store.symbol:
+            if msg['s'] == self._store.symbol:
                 for o in self.open_orders:
                     if o.binance_order['orderId'] == msg['i']:
                         if msg['X'] in [ORDER_STATUS_FILLED, ORDER_STATUS_PARTIALLY_FILLED]:
-                            dt = datetime.fromtimestamp(msg['T'] / 1000)
+                            date = dt.datetime.fromtimestamp(msg['T'] / 1000)
                             executed_size = float(msg['l'])
                             executed_price = float(msg['L'])
                             self._execute_order(o, dt, executed_size, executed_price)
@@ -102,14 +92,14 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
             order.reject()
 
     def _submit(self, owner, data, side, exectype, size, price):
-        order_type = self._ORDER_TYPES.get(exectype, ORDER_TYPE_MARKET)
+        type = self._ORDER_TYPES.get(exectype, ORDER_TYPE_MARKET)
 
-        binance_order = self.store.create_order(side, order_type, size, price)
+        binance_order = self._store.create_order(side, type, size, price)
         order = BinanceOrder(owner, data, exectype, binance_order)
         if binance_order['status'] in [ORDER_STATUS_FILLED, ORDER_STATUS_PARTIALLY_FILLED]:
             self._execute_order(
                 order,
-                datetime.fromtimestamp(binance_order['transactTime'] / 1000),
+                dt.datetime.fromtimestamp(binance_order['transactTime'] / 1000),
                 float(binance_order['executedQty']),
                 float(binance_order['price']))
         self._set_order_status(order, binance_order['status'])
@@ -126,16 +116,16 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
 
     def cancel(self, order):
         order_id = order.binance_order['orderId']
-        self.store.cancel_order(order_id)
+        self._store.cancel_order(order_id)
         
     def format_price(self, value):
-        return self.store.format_price(value)
+        return self._store.format_price(value)
 
     def get_asset_balance(self, asset):
-        return self.store.get_asset_balance(asset)
+        return self._store.get_asset_balance(asset)
 
     def getcash(self):
-        self.cash = self.store._cash
+        self.cash = self._store._cash
         return self.cash
 
     def get_notification(self):
@@ -151,7 +141,7 @@ class BinanceBroker(with_metaclass(MetaBinanceBroker, BrokerBase)):
         return pos
 
     def getvalue(self, datas=None):
-        self.value = self.store._value
+        self.value = self._store._value
         return self.value
 
     def notify(self, order):
