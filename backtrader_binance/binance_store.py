@@ -79,8 +79,8 @@ class BinanceStore(object):
     @retry
     def cancel_open_orders(self):
         orders = self.binance.get_open_orders(symbol=self.symbol)
-        for o in orders:
-            self.cancel_order(o['orderId'])
+        if len(orders) > 0:
+            self.binance._request_api('delete', 'openOrders', signed=True, data={ 'symbol': self.symbol })
 
     @retry
     def cancel_order(self, order_id):
