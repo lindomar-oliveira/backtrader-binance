@@ -1,27 +1,48 @@
 import datetime as dt
 
-from backtrader import Cerebro, TimeFrame
+import backtrader as bt
+
 from backtrader_binance import BinanceStore
 
-from .strategy import RSIStrategy
 
-if __name__ == '__main___':
-    cerebro = Cerebro(quicknotify=True)
+class RSIStrategy(bt.Strategy):
+    def __init__(self):
+        self.rsi = bt.indicators.RSI(period=14)  # RSI indicator
+
+    def next(self):
+        print('Open: {}, High: {}, Low: {}, Close: {}'.format(
+            self.data.open[0],
+            self.data.high[0],
+            self.data.low[0],
+            self.data.close[0]))
+        print('RSI: {}'.format(self.rsi[0]))
+
+        if not self.position:
+            if self.rsi < 30:  # Enter long
+                self.buy()
+        else:
+            if self.rsi > 70:
+                self.sell()  # Close long position
+    
+    def notify_order(self, order):
+        print(order)
+
+if __name__ == '__main__':
+    cerebro = bt.Cerebro(quicknotify=True)
 
     store = BinanceStore(
         api_key='YOUR_BINANCE_KEY',
         api_secret='YOUR_BINANCE_SECRET',
         coin_refer='BTC',
-        coin_target='USDT')
+        coin_target='USDT',
+        testnet=True)
     broker = store.getbroker()
     cerebro.setbroker(broker)
 
-    from_date = dt.datetime.utcnow() - dt.timedelta(minutes=1261)
+    from_date = dt.datetime.utcnow() - dt.timedelta(minutes=5*16)
     data = store.getdata(
-        dataname='BTCUSDT',
-        fromdate=from_date,
-        timeframe=TimeFrame.Minutes,
-        compression=60)
+        timeframe_in_minutes=5,
+        start_date=from_date)
 
     cerebro.addstrategy(RSIStrategy)
     cerebro.adddata(data)
