@@ -32,7 +32,7 @@ class BinanceStore(object):
         (TimeFrame.Months, 1): KLINE_INTERVAL_1MONTH,
     }
 
-    def __init__(self, api_key, api_secret, coin_refer, coin_target, retries=5, testnet=False):
+    def __init__(self, api_key, api_secret, coin_refer, coin_target, testnet=False, retries=5):
         self.binance = Client(api_key, api_secret, testnet=testnet)
         self.binance_socket = ThreadedWebsocketManager(api_key, api_secret, testnet=testnet)
         self.binance_socket.daemon = True
@@ -114,10 +114,10 @@ class BinanceStore(object):
             **params)
 
     def format_price(self, price):
-        return self._format_value(price, self.tick_size)
+        return self._format_value(price, self._tick_size)
     
     def format_quantity(self, size):
-        return self._format_value(size, self.step_size)
+        return self._format_value(size, self._step_size)
 
     @retry
     def get_asset_balance(self, asset):

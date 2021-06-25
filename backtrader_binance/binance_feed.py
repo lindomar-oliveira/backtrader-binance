@@ -112,7 +112,7 @@ class BinanceData(DataBase):
             klines = self._store.binance.get_historical_klines(
                 self.symbol_info['symbol'],
                 self.interval,
-                self.p.fromdate.strftime('%d %b %Y %H:%M:%S'))
+                self.start_date.strftime('%d %b %Y %H:%M:%S'))
 
             if self.p.drop_newest:
                 klines.pop()
